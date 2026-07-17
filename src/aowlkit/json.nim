@@ -33,3 +33,12 @@ proc jStr*(s: string): string =
 
 proc jBool*(b: bool): string =
   if b: "true" else: "false"
+
+proc jArr*(items: seq[string]): string =
+  ## A JSON array of already-rendered element fragments (each element is emitted
+  ## verbatim, so pass values through jStr/jBool/etc. first). Purely additive.
+  result = "["
+  for i in 0 ..< items.len:
+    if i > 0: result.add ","
+    result.add items[i]
+  result.add "]"
