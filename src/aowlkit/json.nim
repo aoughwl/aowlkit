@@ -16,9 +16,11 @@ proc jsonEscape*(s: string): string =
     of '\n': result.add "\\n"
     of '\t': result.add "\\t"
     of '\r': result.add "\\r"
+    of '\b': result.add "\\b"      # 0x08 — JSON short escape (matches std/json)
+    of '\f': result.add "\\f"      # 0x0C
     else:
       if c < ' ':
-        const hexd = "0123456789ABCDEF"
+        const hexd = "0123456789abcdef"   # lowercase, matches std/json
         result.add "\\u00"
         result.add hexd[(ord(c) shr 4) and 0xF]
         result.add hexd[ord(c) and 0xF]
