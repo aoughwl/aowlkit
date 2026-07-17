@@ -64,6 +64,44 @@ proc captureShellMerged*(command: string): CaptureResult =
   except: discard
   result = CaptureResult(output: outp, exitCode: code, ok: true)
 
+proc runWithInput*(exe: string; args: seq[string]; input: string;
+                    workdir = ""): CaptureResult =
+  ## Run `exe args…` feeding `input` on its stdin (materialized to a temp file
+  ## and redirected `< in`), capturing stdout whole. stderr is discarded. Lets a
+  ## tool check an in-memory buffer through a stdin-reading child (e.g.
+  ## `aowlsuggest check --stdin`).
+  let inPath = tempPath("in", ".txt")
+  let outPath = tempPath("out", ".txt")
+  try:
+    writeFile(inPath, input)
+  except:
+    return CaptureResult(output: "", exitCode: -1, ok: false)
+  var cmd = ""
+  if workdir.len > 0:
+    cmd.add "cd " & shellQuote(workdir) & " && "
+  cmd.add shellQuote(exe)
+  for i in 0 ..< args.len:
+    cmd.add " " & shellQuote(args[i])
+  cmd.add " < " & shellQuote(inPath) & " > " & shellQuote(outPath) & " 2>/dev/null"
+  var code = -1
+  try:
+    code = execCmd(cmd)
+  except:
+    code = -1
+  var outp = ""
+  var okRead = true
+  try:
+    outp = readFile(outPath)
+  except:
+    okRead = false
+  try: removeFile(path(inPath))
+  except: discard
+  try: removeFile(path(outPath))
+  except: discard
+  if not okRead:
+    return CaptureResult(output: "", exitCode: code, ok: false)
+  result = CaptureResult(output: outp, exitCode: code, ok: true)
+
 proc runCaptured*(exe: string; args: seq[string]; workdir = "";
                   mergeStderr = true): CaptureResult =
   ## Build and run `exe arg1 arg2 …` (each argument shell-quoted) optionally in
