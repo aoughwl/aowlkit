@@ -158,3 +158,14 @@ proc pill*(txt: string): string =
 
 proc kv*(k: string, v: string): string =
   "  " & gray(padRight(k, 9)) & v
+
+proc tildeAbbrev*(p: string): string =
+  ## `/home/you/x` → `~/x`. Every one of these tools prints absolute paths at a
+  ## user, and an untrimmed home directory is both noise and, in a pasted log, a
+  ## small privacy leak.
+  ##
+  ## Here rather than in each CLI because it was written twice — once in
+  ## aowlup's registry module, once needed again by aowlcas — and the second
+  ## hand-roll of anything is the signal that it belongs in the shared layer.
+  let h = getEnv("HOME", "")
+  if h.len > 0 and p.startsWith(h): "~" & p[h.len ..< p.len] else: p
