@@ -16,8 +16,26 @@ type
     exitCode*: int     ## the child's exit code, or -1 if it could not be run
     ok*: bool          ## false only when the process could not run / be read
 
+const DevNull* = when defined(windows): "nul" else: "/dev/null"
+
+proc shellExec*(command: string): int {.raises.} =
+  ## Run `command` THROUGH A SHELL. On POSIX that is what execCmd already does.
+  ## On Windows nimony's execCmd is a bare CreateProcessW: there is no shell, so
+  ## `cd X && …`, `> file` and `2>…` reached the program as literal arguments and
+  ## every capture here silently failed. cmd.exe's `/s /c "…"` rule strips exactly
+  ## the outer quote pair, so the command's own quoting survives.
+  when defined(windows):
+    result = execCmd("cmd /d /s /c \"" & command & "\"")
+  else:
+    result = execCmd(command)
+
 proc shellQuote*(s: string): string =
   ## Single-quote a string for safe inclusion in a `sh -c` command line.
+  ## On Windows execCmd is cmd.exe, which does not know single quotes: every
+  ## `> 'C:\...\out.txt'` redirect failed, so every capture returned exit -1 with
+  ## no output (aowlmony reported every Windows build as "compile failed").
+  when defined(windows):
+    return "\"" & s.replace("\"", "\"\"") & "\""
   result = "'"
   for i in 0 ..< s.len:
     if s[i] == '\'':
@@ -31,10 +49,10 @@ proc captureShell*(command: string): CaptureResult =
   ## a temp file we then read whole. `command` should NOT include a redirect —
   ## this adds one. stderr is discarded; use `captureShellMerged` to keep it.
   let outPath = tempPath("out", ".txt")
-  let full = command & " > " & shellQuote(outPath) & " 2>/dev/null"
+  let full = command & " > " & shellQuote(outPath) & " 2>" & DevNull
   var code = -1
   try:
-    code = execCmd(full)
+    code = shellExec(full)
   except:
     return CaptureResult(output: "", exitCode: -1, ok: false)
   var outp = ""
@@ -52,7 +70,7 @@ proc captureShellMerged*(command: string): CaptureResult =
   let full = command & " > " & shellQuote(outPath) & " 2>&1"
   var code = -1
   try:
-    code = execCmd(full)
+    code = shellExec(full)
   except:
     return CaptureResult(output: "", exitCode: -1, ok: false)
   var outp = ""
@@ -82,10 +100,10 @@ proc runWithInput*(exe: string; args: seq[string]; input: string;
   cmd.add shellQuote(exe)
   for i in 0 ..< args.len:
     cmd.add " " & shellQuote(args[i])
-  cmd.add " < " & shellQuote(inPath) & " > " & shellQuote(outPath) & " 2>/dev/null"
+  cmd.add " < " & shellQuote(inPath) & " > " & shellQuote(outPath) & " 2>" & DevNull
   var code = -1
   try:
-    code = execCmd(cmd)
+    code = shellExec(cmd)
   except:
     code = -1
   var outp = ""
